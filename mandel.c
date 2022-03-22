@@ -12,7 +12,18 @@
 
 int iteration_to_color( int i, int max );
 int iterations_at_point( double x, double y, int max );
-void compute_image( struct bitmap *bm, double xmin, double xmax, double ymin, double ymax, int max, int threads );
+void * compute_image( void * arg  );
+int threads = 1;
+
+struct parameters{
+	struct bitmap *bm;
+	double xmin;
+	double xmax;
+	double ymin;
+	double ymax;
+	int max;
+	int id;
+};
 
 void show_help()
 {
@@ -47,7 +58,8 @@ int main( int argc, char *argv[] )
 	int    image_width = 500;
 	int    image_height = 500;
 	int    max = 1000;
-	int    threads = 1;
+	threads = 1;
+	
 
 	struct timeval begin;
 	struct timeval end;
@@ -87,18 +99,45 @@ int main( int argc, char *argv[] )
 				break;
 		}
 	}
+	// divide image height by the amount of threads there are (?)
 
 	// Display the configuration of the image.
+	struct parameters params[threads];
+
+	
+
 	printf("mandel: x=%lf y=%lf scale=%lf threads=%d max=%d outfile=%s\n",xcenter,ycenter,scale,threads,max,outfile);
+	
+	//printf("xmin= %lf xmax=%lf ymin=%lf ymax=%lf max=%d\n", image.xmin, image.xmax, image.ymin, image.ymax, image.max);
+
+	pthread_t tids[threads]; // declare a pthread array that will house the thread addresses
+	// iterate through a for loop and pthread create and join the created threads
 
 	// Create a bitmap of the appropriate size.
 	struct bitmap *bm = bitmap_create(image_width,image_height);
+
+	for (int i = 0; i < threads; i++) {
+		params[i].bm = bm;
+		params[i].xmin = xcenter-scale;
+		params[i].xmax = xcenter+scale;
+		params[i].ymin = ycenter-scale;
+		params[i].ymax = ycenter+scale;
+		params[i].max = max;
+		params[i].id = i;
+	}
 
 	// Fill it with a dark blue, for debugging
 	bitmap_reset(bm,MAKE_RGBA(0,0,255,0));
 
 	// Compute the Mandelbrot image
-	compute_image(bm,xcenter-scale,xcenter+scale,ycenter-scale,ycenter+scale,max,threads);
+	for (int i = 0; i < threads; i++) {
+		pthread_create(&tids[i], NULL, compute_image, (void *) &params[i]);
+	}
+
+	for (int i = 0; i < threads; i++) {
+		pthread_join(tids[i], NULL);
+	}
+	//compute_image(bm,xcenter-scale,xcenter+scale,ycenter-scale,ycenter+scale,max);
 
 
 	gettimeofday(&end, NULL);
@@ -123,37 +162,40 @@ Compute an entire Mandelbrot image, writing each point to the given bitmap.
 Scale the image to the range (xmin-xmax,ymin-ymax), limiting iterations to "max"
 */
 
-void compute_image( struct bitmap *bm, double xmin, double xmax, double ymin, double ymax, int max, int threads )
+void * compute_image( void * arg )
 {
 	int i,j;
 
-	int width = bitmap_width(bm);
-	int height = bitmap_height(bm);
+	struct parameters * params = (struct parameters *) arg;
+
+	int width = bitmap_width(params->bm);
+	int height = bitmap_height(params->bm);
+
+	int begin = params->id * height / threads;
+	int end = (begin + height / threads); // (?) There is a discrepancy in rendering the image line by line
+	// there are a specific number of blue lines in the picture that correspond with n
+	// if there are 5 threads there are 5 blue lines seen. But this is not the case for n = 10
+	// is it because of the inaccuracy when dividing integers?
 
 	// For every pixel in the image...
-	// according to the amount of threads and the height of the map, calculate how the map will be divided between the threads
 
-	pthread_t tid[threads];
-
-	for (int i = 0; i < threads; i++) {
-
-	}
-
-	for(j=0;j<height;j++) {
+	for(j=begin;j<end;j++) {
 
 		for(i=0;i<width;i++) {
 
 			// Determine the point in x,y space for that pixel.
-			double x = xmin + i*(xmax-xmin)/width;
-			double y = ymin + j*(ymax-ymin)/height;
+			double x = params->xmin + i*((params->xmax)-(params->xmin))/width;
+			double y = params->ymin + j*((params->ymax)-(params->ymin))/height;
 
 			// Compute the iterations at that point.
-			int iters = iterations_at_point(x,y,max);
+			int iters = iterations_at_point(x,y,params->max);
 
 			// Set the pixel in the bitmap.
-			bitmap_set(bm,i,j,iters);
+			bitmap_set(params->bm,i,j,iters);
 		}
 	}
+
+	return NULL;
 }
 
 /*
