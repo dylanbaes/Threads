@@ -143,7 +143,7 @@ int main( int argc, char *argv[] )
 	gettimeofday(&end, NULL);
 
 	long execution = ( end.tv_sec * 1000000 + end.tv_usec ) - ( begin.tv_sec * 1000000 + begin.tv_usec );
-	printf("This code took %ld microseconds to execute\n", execution);
+	//printf("This code took %ld microseconds to execute\n", execution); //use for report purposes
 
 
 	// Save the image in the stated file.
